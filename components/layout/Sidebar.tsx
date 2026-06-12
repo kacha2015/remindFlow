@@ -44,8 +44,7 @@ export function Sidebar({ profile, mobileOpen, onMobileClose }: SidebarProps) {
   async function handleLogout() {
     const supabase = createClient()
     await supabase.auth.signOut()
-    router.push('/login')
-    router.refresh()
+    window.location.href = '/login'
   }
 
   const isActive = (href: string) => {

@@ -44,13 +44,10 @@ export async function POST(request: NextRequest) {
   const body = await request.json()
   const { email, password, full_name, phone_number, role: newRole, is_active } = body
 
-  // Use service role to create auth user
+  // Use service role to invite the user so Supabase sends the email
   const adminClient = await createAdminClient()
-  const { data: authData, error: authError } = await adminClient.auth.admin.createUser({
-    email,
-    password,
-    email_confirm: false,
-    user_metadata: { full_name, phone_number: phone_number || null, role: newRole || 'user' },
+  const { data: authData, error: authError } = await adminClient.auth.admin.inviteUserByEmail(email, {
+    data: { full_name, phone_number: phone_number || null, role: newRole || 'user' },
   })
 
   if (authError) return NextResponse.json({ error: authError.message }, { status: 500 })
