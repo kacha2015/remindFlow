@@ -1,0 +1,123 @@
+'use client'
+
+import { useState } from 'react'
+import Link from 'next/link'
+import { useForm } from 'react-hook-form'
+import { zodResolver } from '@hookform/resolvers/zod'
+import { Bell, Mail, ArrowLeft, CheckCircle } from 'lucide-react'
+import { createClient } from '@/lib/supabase/client'
+import { forgotPasswordSchema, type ForgotPasswordInput } from '@/lib/types/schemas'
+import { Button } from '@/components/ui/button'
+import { Input } from '@/components/ui/input'
+import { FormField } from '@/components/ui/helpers'
+import { useToast } from '@/components/ui/toast'
+
+export default function ForgotPasswordPage() {
+  const { toast } = useToast()
+  const [sent, setSent] = useState(false)
+
+  const {
+    register,
+    handleSubmit,
+    formState: { errors, isSubmitting },
+  } = useForm<ForgotPasswordInput>({ resolver: zodResolver(forgotPasswordSchema) })
+
+  async function onSubmit(data: ForgotPasswordInput) {
+    const supabase = createClient()
+    const { error } = await supabase.auth.resetPasswordForEmail(data.email, {
+      redirectTo: `${window.location.origin}/update-password`,
+    })
+
+    if (error) {
+      toast({ title: 'Error', description: error.message, variant: 'destructive' })
+      return
+    }
+
+    setSent(true)
+  }
+
+  return (
+    <div className="min-h-screen flex flex-col lg:flex-row">
+      {/* Left branding panel */}
+      <div className="hidden lg:flex lg:w-1/2 bg-gradient-to-br from-indigo-600 via-indigo-700 to-purple-800 flex-col justify-between p-12 text-white">
+        <div className="flex items-center gap-3">
+          <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-white/20 backdrop-blur">
+            <Bell className="h-6 w-6 text-white" />
+          </div>
+          <span className="text-2xl font-bold tracking-tight">RemindFlow</span>
+        </div>
+        <div className="space-y-4">
+          <h1 className="text-4xl font-bold leading-tight">Forgot your<br />password?</h1>
+          <p className="text-indigo-200 text-lg">No worries. Enter your email and we&apos;ll send you a link to reset it.</p>
+        </div>
+        <p className="text-indigo-300 text-sm">© {new Date().getFullYear()} RemindFlow</p>
+      </div>
+
+      {/* Right form */}
+      <div className="flex flex-1 items-center justify-center p-6 sm:p-12">
+        <div className="w-full max-w-sm">
+          <div className="flex items-center gap-2 mb-8 lg:hidden">
+            <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-indigo-600">
+              <Bell className="h-5 w-5 text-white" />
+            </div>
+            <span className="text-xl font-bold text-gray-900">RemindFlow</span>
+          </div>
+
+          {sent ? (
+            <>
+              <div className="flex items-center justify-center mb-6">
+                <div className="flex h-16 w-16 items-center justify-center rounded-full bg-green-100">
+                  <CheckCircle className="h-8 w-8 text-green-600" />
+                </div>
+              </div>
+              <h2 className="text-2xl font-bold text-gray-900 text-center">Check your email</h2>
+              <p className="mt-2 text-sm text-gray-500 text-center">
+                We sent a password reset link to your email. Click the link to set a new password.
+              </p>
+              <p className="mt-4 text-xs text-gray-400 text-center">
+                Didn&apos;t receive the email? Check your spam folder or try again.
+              </p>
+              <Link
+                href="/login"
+                className="mt-6 flex items-center justify-center gap-2 text-sm font-medium text-indigo-600 hover:text-indigo-500"
+              >
+                <ArrowLeft className="h-4 w-4" />
+                Back to sign in
+              </Link>
+            </>
+          ) : (
+            <>
+              <h2 className="text-2xl font-bold text-gray-900">Forgot password?</h2>
+              <p className="mt-1 text-sm text-gray-500">Enter your email to receive a reset link</p>
+
+              <form onSubmit={handleSubmit(onSubmit)} className="mt-8 space-y-4">
+                <FormField label="Email address" error={errors.email?.message} required>
+                  <Input
+                    type="email"
+                    placeholder="you@example.com"
+                    autoComplete="email"
+                    {...register('email')}
+                    error={errors.email?.message}
+                  />
+                </FormField>
+
+                <Button type="submit" className="w-full mt-2" size="lg" loading={isSubmitting}>
+                  <Mail className="h-4 w-4" />
+                  Send reset link
+                </Button>
+              </form>
+
+              <Link
+                href="/login"
+                className="mt-6 flex items-center justify-center gap-2 text-sm font-medium text-gray-500 hover:text-gray-700"
+              >
+                <ArrowLeft className="h-4 w-4" />
+                Back to sign in
+              </Link>
+            </>
+          )}
+        </div>
+      </div>
+    </div>
+  )
+}
