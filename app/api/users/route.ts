@@ -52,11 +52,17 @@ export async function POST(request: NextRequest) {
 
   if (authError) return NextResponse.json({ error: authError.message }, { status: 500 })
 
-  // Update profile (trigger creates it, update remaining fields)
+  // Upsert profile so phone_number is always persisted
   const { error: profileError } = await adminClient
     .from('profiles')
-    .update({ full_name, phone_number: phone_number || null, role: newRole || 'user', is_active: is_active ?? true })
-    .eq('id', authData.user.id)
+    .upsert({
+      id: authData.user.id,
+      full_name,
+      email,
+      phone_number: phone_number || null,
+      role: newRole || 'user',
+      is_active: is_active ?? true,
+    })
 
   if (profileError) return NextResponse.json({ error: profileError.message }, { status: 500 })
 
