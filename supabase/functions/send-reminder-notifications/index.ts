@@ -3,10 +3,14 @@
 // Triggered by: pg_cron every minute
 
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
+import nodemailer from 'npm:nodemailer@6.9.15'
 
 const SUPABASE_URL = Deno.env.get('SUPABASE_URL')!
 const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
-const RESEND_API_KEY = Deno.env.get('RESEND_API_KEY')!
+const SES_SMTP_HOST = Deno.env.get('SES_SMTP_HOST')!
+const SES_SMTP_PORT = Number(Deno.env.get('SES_SMTP_PORT') || '587')
+const SES_SMTP_USER = Deno.env.get('SES_SMTP_USER')!
+const SES_SMTP_PASS = Deno.env.get('SES_SMTP_PASS')!
 const TWILIO_ACCOUNT_SID = Deno.env.get('TWILIO_ACCOUNT_SID')!
 const TWILIO_AUTH_TOKEN = Deno.env.get('TWILIO_AUTH_TOKEN')!
 const TWILIO_WHATSAPP_FROM = Deno.env.get('TWILIO_WHATSAPP_FROM')!
@@ -31,6 +35,16 @@ interface Reminder {
   created_by: string | null
   assigned_users: { user: Profile }[]
 }
+
+const mailer = nodemailer.createTransport({
+  host: SES_SMTP_HOST,
+  port: SES_SMTP_PORT,
+  secure: SES_SMTP_PORT === 465,
+  auth: {
+    user: SES_SMTP_USER,
+    pass: SES_SMTP_PASS,
+  },
+})
 
 /** Convierte "now" UTC al timezone del reminder y extrae fecha y hora local */
 function getLocalDateTimeInZone(now: Date, timezone: string): { date: string; time: string } {
@@ -118,21 +132,13 @@ Deno.serve(async (_req: Request) => {
     for (const user of users) {
       // --- Email ---
       try {
-        const emailRes = await fetch('https://api.resend.com/emails', {
-          method: 'POST',
-          headers: {
-            Authorization: `Bearer ${RESEND_API_KEY}`,
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({
-            from: APP_FROM_EMAIL,
-            to: [user.email],
-            subject: `Reminder: ${reminder.title}`,
-            html: buildEmailHtml(reminder, user, tz),
-          }),
+        const info = await mailer.sendMail({
+          from: APP_FROM_EMAIL,
+          to: user.email,
+          subject: `Reminder: ${reminder.title}`,
+          html: buildEmailHtml(reminder, user, tz),
         })
-        const emailData = await emailRes.json()
-        results.push({ channel: 'email', user: user.email, status: emailRes.ok ? 'sent' : 'failed', data: emailData })
+        results.push({ channel: 'email', user: user.email, status: 'sent', data: { messageId: info.messageId } })
       } catch (e) {
         console.error('Email error:', e)
         results.push({ channel: 'email', user: user.email, status: 'error' })

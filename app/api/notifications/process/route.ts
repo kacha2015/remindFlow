@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createAdminClient } from '@/lib/supabase/server'
+import nodemailer from 'nodemailer'
 
 // POST /api/notifications/process
 // Procesa reminders pendientes y envía email + WhatsApp
@@ -14,6 +15,15 @@ interface Profile {
 
 export async function POST(request: NextRequest) {
   const supabase = await createAdminClient()
+  const mailer = nodemailer.createTransport({
+    host: process.env.SES_SMTP_HOST,
+    port: Number(process.env.SES_SMTP_PORT || '587'),
+    secure: Number(process.env.SES_SMTP_PORT || '587') === 465,
+    auth: {
+      user: process.env.SES_SMTP_USER,
+      pass: process.env.SES_SMTP_PASS,
+    },
+  })
 
   const now = new Date()
 
@@ -69,31 +79,22 @@ export async function POST(request: NextRequest) {
 
     for (const user of users) {
       // --- EMAIL via Resend ---
-      const resendKey = process.env.RESEND_API_KEY
       const fromEmail = process.env.APP_FROM_EMAIL || 'noreply@remindflow.app'
 
-      if (resendKey) {
+      if (process.env.SES_SMTP_HOST && process.env.SES_SMTP_USER && process.env.SES_SMTP_PASS) {
         try {
-          const emailRes = await fetch('https://api.resend.com/emails', {
-            method: 'POST',
-            headers: {
-              Authorization: `Bearer ${resendKey}`,
-              'Content-Type': 'application/json',
-            },
-            body: JSON.stringify({
-              from: fromEmail,
-              to: [user.email],
-              subject: `🔔 Reminder: ${(reminder as Record<string, unknown>).title}`,
-              html: buildEmailHtml(reminder as never, user, tz),
-            }),
+          const info = await mailer.sendMail({
+            from: fromEmail,
+            to: user.email,
+            subject: `🔔 Reminder: ${(reminder as Record<string, unknown>).title}`,
+            html: buildEmailHtml(reminder as never, user, tz),
           })
-          const emailData = await emailRes.json()
-          results.push({ channel: 'email', user: user.email, status: emailRes.ok ? 'sent' : 'failed', data: emailData })
+          results.push({ channel: 'email', user: user.email, status: 'sent', data: { messageId: info.messageId } })
         } catch (e) {
           results.push({ channel: 'email', user: user.email, status: 'error', error: String(e) })
         }
       } else {
-        results.push({ channel: 'email', user: user.email, status: 'skipped', reason: 'RESEND_API_KEY not configured' })
+        results.push({ channel: 'email', user: user.email, status: 'skipped', reason: 'SES SMTP not configured' })
       }
 
       // --- WHATSAPP via Twilio ---
@@ -161,7 +162,9 @@ export async function GET() {
     message: 'POST this endpoint to process reminders. GET shows pending list.',
     pending: reminders || [],
     env: {
-      RESEND_API_KEY: process.env.RESEND_API_KEY ? '✅ set' : '❌ missing',
+      SES_SMTP_HOST: process.env.SES_SMTP_HOST ? '✅ set' : '❌ missing',
+      SES_SMTP_USER: process.env.SES_SMTP_USER ? '✅ set' : '❌ missing',
+      SES_SMTP_PASS: process.env.SES_SMTP_PASS ? '✅ set' : '❌ missing',
       TWILIO_ACCOUNT_SID: process.env.TWILIO_ACCOUNT_SID ? '✅ set' : '❌ missing',
       TWILIO_AUTH_TOKEN: process.env.TWILIO_AUTH_TOKEN ? '✅ set' : '❌ missing',
       TWILIO_WHATSAPP_FROM: process.env.TWILIO_WHATSAPP_FROM ? '✅ set' : '❌ missing',
