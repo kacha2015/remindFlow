@@ -98,7 +98,7 @@ export default async function ReminderDetailPage({ params }: { params: Promise<{
           </div>
         </div>
 
-        {/* Admin: status update */}
+        {/* Admin: enable/disable */}
         {isAdmin && <ReminderStatusUpdate reminderId={id} currentStatus={reminder.status} />}
 
         {/* Assigned users */}

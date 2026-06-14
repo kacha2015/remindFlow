@@ -5,18 +5,12 @@ import { useRouter } from 'next/navigation'
 import type { ReminderStatus } from '@/lib/types'
 import { Button } from '@/components/ui/button'
 import { useToast } from '@/components/ui/toast'
-import { CheckCircle, XCircle, Clock } from 'lucide-react'
+import { Clock, XCircle } from 'lucide-react'
 
 interface Props {
   reminderId: string
   currentStatus: ReminderStatus
 }
-
-const statuses: { value: ReminderStatus; label: string; icon: React.ReactNode }[] = [
-  { value: 'pending', label: 'Pending', icon: <Clock className="h-4 w-4" /> },
-  { value: 'sent', label: 'Sent', icon: <CheckCircle className="h-4 w-4" /> },
-  { value: 'cancelled', label: 'Cancelled', icon: <XCircle className="h-4 w-4" /> },
-]
 
 export default function ReminderStatusUpdate({ reminderId, currentStatus }: Props) {
   const router = useRouter()
@@ -44,30 +38,33 @@ export default function ReminderStatusUpdate({ reminderId, currentStatus }: Prop
 
   return (
     <div className="bg-white rounded-xl border border-gray-200 shadow-sm p-6">
-      <h3 className="font-semibold text-gray-900 mb-3">Update Status</h3>
+      <h3 className="font-semibold text-gray-900 mb-3">Enable / Disable</h3>
       <div className="flex flex-wrap gap-2">
-        {statuses.map((s) => (
-          <Button
-            key={s.value}
-            variant={status === s.value ? 'default' : 'outline'}
-            size="sm"
-            onClick={() => handleUpdate(s.value)}
-            loading={loading && status !== s.value}
-            disabled={loading}
-            className={
-              status === s.value
-                ? s.value === 'sent'
-                  ? 'bg-green-600 hover:bg-green-700'
-                  : s.value === 'cancelled'
-                  ? 'bg-red-600 hover:bg-red-700'
-                  : ''
-                : ''
-            }
-          >
-            {s.icon}
-            {s.label}
-          </Button>
-        ))}
+        {status !== 'sent' && (
+          <>
+            <Button
+              variant={status === 'pending' ? 'default' : 'outline'}
+              size="sm"
+              onClick={() => handleUpdate('pending')}
+              loading={loading && status !== 'pending'}
+              disabled={loading || status === 'pending'}
+            >
+              <Clock className="h-4 w-4" />
+              Enable
+            </Button>
+            <Button
+              variant={status === 'cancelled' ? 'default' : 'outline'}
+              size="sm"
+              onClick={() => handleUpdate('cancelled')}
+              loading={loading && status !== 'cancelled'}
+              disabled={loading || status === 'cancelled'}
+            >
+              <XCircle className="h-4 w-4" />
+              Disable
+            </Button>
+          </>
+        )}
+        {status === 'sent' && <p className="text-sm text-gray-500">Sent reminders can’t be re-enabled.</p>}
       </div>
     </div>
   )

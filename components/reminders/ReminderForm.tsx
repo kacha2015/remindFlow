@@ -156,6 +156,7 @@ export default function ReminderForm({ users, reminder }: Props) {
         <FormField label="Recurrence" error={errors.recurrence?.message}>
           <Select {...register('recurrence')}>
             <option value="none">No recurrence</option>
+            <option value="hourly">Hourly (same day)</option>
             <option value="daily">Daily</option>
             <option value="weekly">Weekly</option>
             <option value="monthly">Monthly</option>

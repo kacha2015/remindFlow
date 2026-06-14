@@ -39,7 +39,7 @@ export const reminderSchema = z.object({
   reminder_time: z.string().min(1, 'Time is required'),
   timezone: z.string().default('UTC'),
   status: z.enum(['pending', 'sent', 'cancelled']).default('pending'),
-  recurrence: z.enum(['none', 'daily', 'weekly', 'monthly']).default('none'),
+   recurrence: z.enum(['none', 'hourly', 'daily', 'weekly', 'monthly']).default('none'),
   assigned_user_ids: z.array(z.string()).min(1, 'At least one user must be assigned'),
 })
 

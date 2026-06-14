@@ -3,7 +3,7 @@
 import { useState } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
-import { Bell, Edit, Trash2, Users, Search } from 'lucide-react'
+import { Bell, Edit, Trash2, Users, Search, Clock3, XCircle } from 'lucide-react'
 import type { Reminder } from '@/lib/types'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -32,6 +32,7 @@ export default function ReminderListClient({ reminders: initial, isAdmin }: Prop
   const [statusFilter, setStatusFilter] = useState('all')
   const [deleteId, setDeleteId] = useState<string | null>(null)
   const [deleting, setDeleting] = useState(false)
+  const [statusLoadingId, setStatusLoadingId] = useState<string | null>(null)
 
   const filtered = reminders.filter((r) => {
     const matchSearch =
@@ -55,6 +56,27 @@ export default function ReminderListClient({ reminders: initial, isAdmin }: Prop
     }
     setDeleteId(null)
     router.refresh()
+  }
+
+  async function handleToggleStatus(reminderId: string, currentStatus: string) {
+    const nextStatus = currentStatus === 'pending' ? 'cancelled' : 'pending'
+    setStatusLoadingId(reminderId)
+    const res = await fetch(`/api/reminders/${reminderId}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ status: nextStatus }),
+    })
+    setStatusLoadingId(null)
+
+    if (res.ok) {
+      setReminders((prev) =>
+        prev.map((r) => (r.id === reminderId ? { ...r, status: nextStatus as Reminder['status'] } : r))
+      )
+      toast({ title: nextStatus === 'pending' ? 'Reminder enabled' : 'Reminder disabled', variant: 'success' })
+      router.refresh()
+    } else {
+      toast({ title: 'Error updating reminder', variant: 'destructive' })
+    }
   }
 
   return (
@@ -128,6 +150,27 @@ export default function ReminderListClient({ reminders: initial, isAdmin }: Prop
                   </Link>
                   {isAdmin && (
                     <>
+                      {(reminder.status === 'pending' || reminder.status === 'cancelled') && (
+                        <Button
+                          variant={reminder.status === 'pending' ? 'outline' : 'default'}
+                          size="sm"
+                          loading={statusLoadingId === reminder.id}
+                          disabled={statusLoadingId !== null}
+                          onClick={() => handleToggleStatus(reminder.id, reminder.status)}
+                        >
+                          {reminder.status === 'pending' ? (
+                            <>
+                              <XCircle className="h-4 w-4" />
+                              Disable
+                            </>
+                          ) : (
+                            <>
+                              <Clock3 className="h-4 w-4" />
+                              Enable
+                            </>
+                          )}
+                        </Button>
+                      )}
                       <Link href={`/reminders/${reminder.id}/edit`}>
                         <Button variant="ghost" size="icon-sm">
                           <Edit className="h-4 w-4" />

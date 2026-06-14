@@ -176,15 +176,15 @@ Deno.serve(async (_req: Request) => {
 
     // Recurrencia: crear siguiente ocurrencia
     if (reminder.recurrence !== 'none') {
-      const nextDate = getNextDate(reminder.reminder_date, reminder.recurrence)
-      if (nextDate) {
+      const nextOccurrence = getNextOccurrence(reminder.reminder_date, reminder.reminder_time, reminder.recurrence)
+      if (nextOccurrence) {
         const { data: newReminder } = await supabase
           .from('reminders')
           .insert({
             title: reminder.title,
             description: reminder.description,
-            reminder_date: nextDate,
-            reminder_time: reminder.reminder_time,
+            reminder_date: nextOccurrence.date,
+            reminder_time: nextOccurrence.time,
             timezone: reminder.timezone,
             status: 'pending',
             recurrence: reminder.recurrence,
@@ -238,13 +238,28 @@ function buildEmailHtml(reminder: Reminder, user: Profile, timezone: string): st
 </html>`
 }
 
-function getNextDate(dateStr: string, recurrence: string): string | null {
-  const date = new Date(dateStr + 'T00:00:00Z')
+function getNextOccurrence(dateStr: string, timeStr: string, recurrence: string): { date: string; time: string } | null {
+  const date = new Date(`${dateStr}T${timeStr}Z`)
+
   switch (recurrence) {
-    case 'daily':   date.setUTCDate(date.getUTCDate() + 1); break
-    case 'weekly':  date.setUTCDate(date.getUTCDate() + 7); break
-    case 'monthly': date.setUTCMonth(date.getUTCMonth() + 1); break
-    default: return null
+    case 'hourly':
+      date.setUTCHours(date.getUTCHours() + 1)
+      break
+    case 'daily':
+      date.setUTCDate(date.getUTCDate() + 1)
+      break
+    case 'weekly':
+      date.setUTCDate(date.getUTCDate() + 7)
+      break
+    case 'monthly':
+      date.setUTCMonth(date.getUTCMonth() + 1)
+      break
+    default:
+      return null
   }
-  return date.toISOString().slice(0, 10)
+
+  return {
+    date: date.toISOString().slice(0, 10),
+    time: date.toISOString().slice(11, 19),
+  }
 }

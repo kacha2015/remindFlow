@@ -1,6 +1,6 @@
 export type Role = 'admin' | 'user'
 export type ReminderStatus = 'pending' | 'sent' | 'cancelled'
-export type RecurrenceType = 'none' | 'daily' | 'weekly' | 'monthly'
+export type RecurrenceType = 'none' | 'hourly' | 'daily' | 'weekly' | 'monthly'
 
 export interface Profile {
   id: string
