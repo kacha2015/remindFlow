@@ -44,10 +44,15 @@ export async function POST(request: NextRequest) {
   const body = await request.json()
   const { email, password, full_name, phone_number, role: newRole, is_active } = body
 
-  // Use service role to invite the user so Supabase sends the email
+  // Use service role to invite the user so Supabase sends the invitation link
   const adminClient = await createAdminClient()
+  // redirectTo should point to the client page that consumes the invite token
+  // prefer an env var to allow different deployments
+  const redirectTo = process.env.NEXT_PUBLIC_SITE_URL ?? 'https://remind-flow-nu.vercel.app'
+
   const { data: authData, error: authError } = await adminClient.auth.admin.inviteUserByEmail(email, {
     data: { full_name, phone_number: phone_number || null, role: newRole || 'user' },
+    redirectTo: `${redirectTo.replace(/\/$/, '')}/update-password`,
   })
 
   if (authError) return NextResponse.json({ error: authError.message }, { status: 500 })

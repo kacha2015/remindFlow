@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { useForm } from 'react-hook-form'
@@ -18,6 +18,7 @@ export default function UpdatePasswordPage() {
   const { toast } = useToast()
   const [showPassword, setShowPassword] = useState(false)
   const [success, setSuccess] = useState(false)
+  const [sessionHandled, setSessionHandled] = useState(false)
 
   const {
     register,
@@ -40,6 +41,50 @@ export default function UpdatePasswordPage() {
     toast({ title: 'Password updated!', description: 'Your password has been changed successfully.', variant: 'success' })
     setTimeout(() => router.push('/login'), 2000)
   }
+
+  useEffect(() => {
+    // When the user opens the password reset / invite link, Supabase includes the
+    // access token in the URL. We must parse it so the client establishes the
+    // session and `updateUser` works. getSessionFromUrl will consume the token
+    // and set the session automatically. If there's no token, it resolves with
+    // null — we still mark sessionHandled to allow normal operation.
+    const supabase = createClient()
+
+    ;(async () => {
+      try {
+        // some versions of the supabase client do not include this in the TS types
+        // so call it dynamically to avoid type errors
+        if (typeof (supabase.auth as any).getSessionFromUrl === 'function') {
+          await (supabase.auth as any).getSessionFromUrl({ storeSession: true })
+        }
+        // If getSessionFromUrl didn't establish a session (or isn't available),
+        // try parsing the URL fragment manually and setting the session. Some
+        // providers return tokens in the hash (#) and depending on redirect
+        // configuration the automatic method may not persist the session.
+        const current = window.location.href
+        const hash = window.location.hash || ''
+        if ((!((supabase.auth as any).getSession && (await (supabase.auth as any).getSession()))) && hash.includes('access_token')) {
+          try {
+            const params = new URLSearchParams(hash.replace(/^#/, ''))
+            const access_token = params.get('access_token')
+            const refresh_token = params.get('refresh_token')
+            if (access_token) {
+              // setSession accepts the token pair and stores it client-side
+              if (typeof (supabase.auth as any).setSession === 'function') {
+                await (supabase.auth as any).setSession({ access_token, refresh_token })
+              }
+            }
+          } catch (e) {
+            // ignore failures here — we'll handle session absence below
+          }
+        }
+      } catch (err: any) {
+        // ignore — getSessionFromUrl throws for invalid/expired tokens
+      } finally {
+        setSessionHandled(true)
+      }
+    })()
+  }, [])
 
   return (
     <div className="min-h-screen flex flex-col lg:flex-row">
