@@ -1,5 +1,5 @@
 import { redirect, notFound } from 'next/navigation'
-import { createClient } from '@/lib/supabase/server'
+import { createClient, createAdminClient } from '@/lib/supabase/server'
 import type { Profile, Reminder } from '@/lib/types'
 import Link from 'next/link'
 import { ArrowLeft, Edit, Users, Clock, RefreshCw, CheckCircle, XCircle } from 'lucide-react'
@@ -11,6 +11,7 @@ import ReminderStatusUpdate from './status-update'
 
 export default async function ReminderDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const supabase = await createClient()
+  const admin = await createAdminClient()
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) redirect('/login')
 
@@ -18,13 +19,18 @@ export default async function ReminderDetailPage({ params }: { params: Promise<{
   const isAdmin = profile?.role === 'admin'
 
   const { id } = await params
-  const { data: raw, error } = await supabase
+  const { data: raw, error } = await admin
     .from('reminders')
-    .select(`*, assigned_users:reminder_users(user:profiles(id, full_name, email, role, is_active, phone_number)), creator:profiles!reminders_created_by_fkey(id, full_name, email)`)
+    .select(`*, assigned_users:reminder_users(user_id, user:profiles(id, full_name, email, role, is_active, phone_number)), creator:profiles!reminders_created_by_fkey(id, full_name, email)`)
     .eq('id', id)
     .single()
 
   if (error || !raw) notFound()
+
+  const isAssigned = ((raw.assigned_users as { user_id: string }[]) || []).some((ru) => ru.user_id === user.id)
+  if (!isAdmin && raw.created_by !== user.id && !isAssigned) notFound()
+
+  const canEdit = isAdmin || raw.created_by === user.id
 
   const reminder: Reminder = {
     ...(raw as Record<string, unknown>),
@@ -46,7 +52,7 @@ export default async function ReminderDetailPage({ params }: { params: Promise<{
           </Button>
         </Link>
         <h1 className="text-xl font-bold text-gray-900 flex-1 truncate">{reminder.title}</h1>
-        {isAdmin && (
+        {canEdit && (
           <Link href={`/reminders/${id}/edit`}>
             <Button variant="outline" size="sm">
               <Edit className="h-4 w-4" />
@@ -98,8 +104,8 @@ export default async function ReminderDetailPage({ params }: { params: Promise<{
           </div>
         </div>
 
-        {/* Admin: enable/disable */}
-        {isAdmin && <ReminderStatusUpdate reminderId={id} currentStatus={reminder.status} />}
+        {/* Edit: enable/disable toggle for admin or creator */}
+        {canEdit && <ReminderStatusUpdate reminderId={id} currentStatus={reminder.status} />}
 
         {/* Assigned users */}
         <div className="bg-white rounded-xl border border-gray-200 shadow-sm p-6">

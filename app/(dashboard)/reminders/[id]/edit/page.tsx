@@ -1,5 +1,5 @@
 import { redirect, notFound } from 'next/navigation'
-import { createClient } from '@/lib/supabase/server'
+import { createClient, createAdminClient } from '@/lib/supabase/server'
 import type { Profile, Reminder } from '@/lib/types'
 import ReminderForm from '@/components/reminders/ReminderForm'
 import { PageHeader } from '@/components/ui/helpers'
@@ -9,15 +9,16 @@ import { Button } from '@/components/ui/button'
 
 export default async function EditReminderPage({ params }: { params: Promise<{ id: string }> }) {
   const supabase = await createClient()
+  const admin = await createAdminClient()
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) redirect('/login')
 
   const { data: profile } = await supabase.from('profiles').select('role').eq('id', user.id).single()
-  if (!profile || profile.role !== 'admin') redirect('/')
+  if (!profile) redirect('/')
 
   const { id } = await params
 
-  const { data: raw, error } = await supabase
+  const { data: raw, error } = await admin
     .from('reminders')
     .select(`*, assigned_users:reminder_users(user:profiles(id, full_name, email, role, is_active))`)
     .eq('id', id)
@@ -25,12 +26,16 @@ export default async function EditReminderPage({ params }: { params: Promise<{ i
 
   if (error || !raw) notFound()
 
+  // Only admin or the creator can edit
+  if (profile.role !== 'admin' && raw.created_by !== user.id) redirect('/')
+
   const reminder: Reminder = {
     ...(raw as Record<string, unknown>),
     assigned_users: ((raw.assigned_users as { user: Profile }[]) || []).map((ru) => ru.user),
   } as Reminder
 
-  const { data: users } = await supabase
+  // Use admin client to bypass RLS (regular users can only see their own profile)
+  const { data: users } = await admin
     .from('profiles')
     .select('id, full_name, email, role, is_active')
     .eq('is_active', true)

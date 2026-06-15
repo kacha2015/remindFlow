@@ -1,5 +1,5 @@
 import { redirect } from 'next/navigation'
-import { createClient } from '@/lib/supabase/server'
+import { createClient, createAdminClient } from '@/lib/supabase/server'
 import Link from 'next/link'
 import { Plus } from 'lucide-react'
 import { Button } from '@/components/ui/button'
@@ -8,6 +8,7 @@ import ReminderListClient from './list-client'
 
 export default async function RemindersPage() {
   const supabase = await createClient()
+  const admin = await createAdminClient()
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) redirect('/login')
 
@@ -16,16 +17,16 @@ export default async function RemindersPage() {
 
   const isAdmin = profile.role === 'admin'
 
-  let query = supabase
+  let query = admin
     .from('reminders')
     .select(`*, assigned_users:reminder_users(user:profiles(id, full_name, email, role, is_active))`)
     .order('reminder_date', { ascending: false })
 
   if (!isAdmin) {
-    query = supabase
+    query = admin
       .from('reminders')
       .select(`*, assigned_users:reminder_users!inner(user_id, user:profiles(id, full_name, email, role, is_active))`)
-      .eq('reminder_users.user_id', user.id)
+      .or(`created_by.eq.${user.id},reminder_users.user_id.eq.${user.id}`)
       .order('reminder_date', { ascending: false })
   }
 
@@ -41,17 +42,15 @@ export default async function RemindersPage() {
         title="Reminders"
         description={isAdmin ? 'Manage all reminders and notifications' : 'Your assigned reminders'}
         action={
-          isAdmin ? (
-            <Link href="/reminders/new">
-              <Button>
-                <Plus className="h-4 w-4" />
-                New Reminder
-              </Button>
-            </Link>
-          ) : undefined
+          <Link href="/reminders/new">
+            <Button>
+              <Plus className="h-4 w-4" />
+              New Reminder
+            </Button>
+          </Link>
         }
       />
-      <ReminderListClient reminders={reminders as never} isAdmin={isAdmin} />
+      <ReminderListClient reminders={reminders as never} isAdmin={isAdmin} userId={user.id} />
     </div>
   )
 }

@@ -16,6 +16,7 @@ import { formatDate, formatTime, getRecurrenceLabel } from '@/lib/utils'
 interface Props {
   reminders: Reminder[]
   isAdmin: boolean
+  userId: string
 }
 
 function statusVariant(status: string) {
@@ -24,7 +25,11 @@ function statusVariant(status: string) {
   return 'cancelled'
 }
 
-export default function ReminderListClient({ reminders: initial, isAdmin }: Props) {
+function canModify(reminder: Reminder, isAdmin: boolean, userId: string): boolean {
+  return isAdmin || reminder.created_by === userId
+}
+
+export default function ReminderListClient({ reminders: initial, isAdmin, userId }: Props) {
   const router = useRouter()
   const { toast } = useToast()
   const [reminders, setReminders] = useState(initial)
@@ -109,8 +114,8 @@ export default function ReminderListClient({ reminders: initial, isAdmin }: Prop
         <EmptyState
           icon={<Bell className="h-6 w-6" />}
           title="No reminders found"
-          description={isAdmin ? 'Create your first reminder to get started.' : 'No reminders assigned to you yet.'}
-          action={isAdmin ? <Link href="/reminders/new"><Button size="sm">New Reminder</Button></Link> : undefined}
+          description="Create your first reminder to get started."
+          action={<Link href="/reminders/new"><Button size="sm">New Reminder</Button></Link>}
         />
       ) : (
         <div className="space-y-3">
@@ -148,7 +153,7 @@ export default function ReminderListClient({ reminders: initial, isAdmin }: Prop
                   <Link href={`/reminders/${reminder.id}`}>
                     <Button variant="outline" size="sm">View</Button>
                   </Link>
-                  {isAdmin && (
+                  {canModify(reminder, isAdmin, userId) && (
                     <>
                       {(reminder.status === 'pending' || reminder.status === 'cancelled') && (
                         <Button

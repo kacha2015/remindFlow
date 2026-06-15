@@ -1,5 +1,5 @@
 import { redirect } from 'next/navigation'
-import { createClient } from '@/lib/supabase/server'
+import { createClient, createAdminClient } from '@/lib/supabase/server'
 import type { Profile } from '@/lib/types'
 import ReminderForm from '@/components/reminders/ReminderForm'
 import { PageHeader } from '@/components/ui/helpers'
@@ -10,9 +10,11 @@ export default async function NewReminderPage() {
   if (!user) redirect('/login')
 
   const { data: profile } = await supabase.from('profiles').select('role').eq('id', user.id).single()
-  if (!profile || profile.role !== 'admin') redirect('/')
+  if (!profile) redirect('/')
 
-  const { data: users } = await supabase
+  // Use admin client to bypass RLS (regular users can only see their own profile)
+  const admin = await createAdminClient()
+  const { data: users } = await admin
     .from('profiles')
     .select('id, full_name, email, role, is_active')
     .eq('is_active', true)

@@ -4,6 +4,7 @@ import { createClient, createAdminClient } from '@/lib/supabase/server'
 // GET /api/reminders
 export async function GET(request: NextRequest) {
   const supabase = await createClient()
+  const adminClient = await createAdminClient()
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
@@ -17,7 +18,7 @@ export async function GET(request: NextRequest) {
   const recurrence = searchParams.get('recurrence')
   const limit = parseInt(searchParams.get('limit') || '50')
 
-  let query = supabase
+  let query = adminClient
     .from('reminders')
     .select(`
       *,
@@ -30,7 +31,7 @@ export async function GET(request: NextRequest) {
     .limit(limit)
 
   if (profile.role !== 'admin') {
-    query = supabase
+    query = adminClient
       .from('reminders')
       .select(`
         *,
@@ -40,7 +41,7 @@ export async function GET(request: NextRequest) {
         ),
         creator:profiles!reminders_created_by_fkey(id, full_name, email)
       `)
-      .eq('reminder_users.user_id', user.id)
+      .or(`created_by.eq.${user.id},reminder_users.user_id.eq.${user.id}`)
       .order('reminder_date', { ascending: false })
       .limit(limit)
   }
@@ -65,18 +66,14 @@ export async function GET(request: NextRequest) {
 // POST /api/reminders
 export async function POST(request: NextRequest) {
   const supabase = await createClient()
+  const adminClient = await createAdminClient()
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-
-  const { data: profile } = await supabase.from('profiles').select('role').eq('id', user.id).single()
-  if (!profile || profile.role !== 'admin') {
-    return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
-  }
 
   const body = await request.json()
   const { assigned_user_ids, ...reminderData } = body
 
-  const { data: reminder, error } = await supabase
+  const { data: reminder, error } = await adminClient
     .from('reminders')
     .insert({ ...reminderData, created_by: user.id })
     .select()
@@ -86,7 +83,7 @@ export async function POST(request: NextRequest) {
 
   // Insert assigned users
   if (assigned_user_ids && assigned_user_ids.length > 0) {
-    const { error: ruError } = await supabase.from('reminder_users').insert(
+    const { error: ruError } = await adminClient.from('reminder_users').insert(
       assigned_user_ids.map((uid: string) => ({ reminder_id: reminder.id, user_id: uid }))
     )
     if (ruError) return NextResponse.json({ error: ruError.message }, { status: 500 })
