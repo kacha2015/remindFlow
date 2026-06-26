@@ -5,32 +5,48 @@ import Link from 'next/link'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { Bell, Mail, ArrowLeft, CheckCircle } from 'lucide-react'
-import { createClient } from '@/lib/supabase/client'
 import { forgotPasswordSchema, type ForgotPasswordInput } from '@/lib/types/schemas'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { FormField } from '@/components/ui/helpers'
 import { useToast } from '@/components/ui/toast'
+import { TurnstileWidget } from '@/components/auth/TurnstileWidget'
 
 export default function ForgotPasswordPage() {
   const { toast } = useToast()
   const [sent, setSent] = useState(false)
+  const [turnstileKey, setTurnstileKey] = useState(0)
+  const turnstileEnabled = process.env.NEXT_PUBLIC_TURNSTILE_ENABLED === 'true'
+  const turnstileSiteKey = process.env.NEXT_PUBLIC_TURNSTILE_SITE_KEY || ''
 
   const {
     register,
     handleSubmit,
+    setValue,
     formState: { errors, isSubmitting },
   } = useForm<ForgotPasswordInput>({ resolver: zodResolver(forgotPasswordSchema) })
 
   async function onSubmit(data: ForgotPasswordInput) {
-    const supabase = createClient()
-    const { error } = await supabase.auth.resetPasswordForEmail(data.email, {
-      redirectTo: `${window.location.origin}/update-password`,
+    const response = await fetch('/api/auth/forgot-password', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(data),
     })
 
-    if (error) {
-      toast({ title: 'Error', description: error.message, variant: 'destructive' })
+    const result = await response.json()
+
+    if (!response.ok) {
+      toast({ title: 'Error', description: result.error || 'Unable to send reset link', variant: 'destructive' })
+      if (turnstileEnabled) {
+        setValue('turnstileToken', '')
+        setTurnstileKey((value) => value + 1)
+      }
       return
+    }
+
+    if (turnstileEnabled) {
+      setValue('turnstileToken', '')
+      setTurnstileKey((value) => value + 1)
     }
 
     setSent(true)
@@ -100,6 +116,19 @@ export default function ForgotPasswordPage() {
                     error={errors.email?.message}
                   />
                 </FormField>
+
+                <input type="hidden" {...register('turnstileToken')} />
+
+                {turnstileEnabled && (
+                  <FormField label="Security check" hint="Complete the Cloudflare Turnstile challenge before continuing.">
+                    <TurnstileWidget
+                      key={turnstileKey}
+                      enabled={turnstileEnabled}
+                      siteKey={turnstileSiteKey}
+                      onTokenChange={(token) => setValue('turnstileToken', token || '', { shouldValidate: true })}
+                    />
+                  </FormField>
+                )}
 
                 <Button type="submit" className="w-full mt-2" size="lg" loading={isSubmitting}>
                   <Mail className="h-4 w-4" />
