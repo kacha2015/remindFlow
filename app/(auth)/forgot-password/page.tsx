@@ -1,20 +1,24 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useCallback } from 'react'
 import Link from 'next/link'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
-import { Bell, Mail, ArrowLeft, CheckCircle } from 'lucide-react'
+import { Bell, Mail, ArrowLeft, CheckCircle, ShieldAlert } from 'lucide-react'
+import Turnstile from 'react-turnstile'
 import { createClient } from '@/lib/supabase/client'
 import { forgotPasswordSchema, type ForgotPasswordInput } from '@/lib/types/schemas'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { FormField } from '@/components/ui/helpers'
 import { useToast } from '@/components/ui/toast'
+import { cn } from '@/lib/utils'
 
 export default function ForgotPasswordPage() {
   const { toast } = useToast()
   const [sent, setSent] = useState(false)
+  const [turnstileToken, setTurnstileToken] = useState<string | null>(null)
+  const [turnstileError, setTurnstileError] = useState(false)
 
   const {
     register,
@@ -22,7 +26,43 @@ export default function ForgotPasswordPage() {
     formState: { errors, isSubmitting },
   } = useForm<ForgotPasswordInput>({ resolver: zodResolver(forgotPasswordSchema) })
 
+  const turnstileEnabled = process.env.NEXT_PUBLIC_TURNSTILE_ENABLED !== 'false'
+  const turnstileSiteKey = process.env.NEXT_PUBLIC_TURNSTILE_SITE_KEY
+
+  const handleTurnstileVerify = useCallback((token: string) => {
+    setTurnstileToken(token)
+    setTurnstileError(false)
+  }, [])
+
+  const handleTurnstileExpire = useCallback(() => {
+    setTurnstileToken(null)
+  }, [])
+
+  const handleTurnstileError = useCallback(() => {
+    setTurnstileError(true)
+    setTurnstileToken(null)
+  }, [])
+
   async function onSubmit(data: ForgotPasswordInput) {
+    if (turnstileEnabled) {
+      if (!turnstileToken) {
+        toast({ title: 'Verification required', description: 'Please complete the security check.', variant: 'destructive' })
+        return
+      }
+
+      const verifyRes = await fetch('/api/verify-turnstile', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ token: turnstileToken }),
+      })
+
+      if (!verifyRes.ok) {
+        toast({ title: 'Verification failed', description: 'Security check failed. Please try again.', variant: 'destructive' })
+        setTurnstileToken(null)
+        return
+      }
+    }
+
     const supabase = createClient()
     const { error } = await supabase.auth.resetPasswordForEmail(data.email, {
       redirectTo: `${window.location.origin}/update-password`,
@@ -100,6 +140,32 @@ export default function ForgotPasswordPage() {
                     error={errors.email?.message}
                   />
                 </FormField>
+
+                {turnstileEnabled && (
+                  turnstileSiteKey ? (
+                    <div className={cn({ 'border border-red-500 rounded-lg p-1': turnstileError })}>
+                      <Turnstile
+                        sitekey={turnstileSiteKey}
+                        onVerify={handleTurnstileVerify}
+                        onExpire={handleTurnstileExpire}
+                        onError={handleTurnstileError}
+                        theme="light"
+                        className="flex justify-center"
+                      />
+                    </div>
+                  ) : (
+                    <p className="text-xs text-amber-500 flex items-center gap-1">
+                      <ShieldAlert className="h-3 w-3" />
+                      Security check not configured. Contact the administrator.
+                    </p>
+                  )
+                )}
+                {turnstileError && (
+                  <p className="text-xs text-red-500 flex items-center gap-1">
+                    <ShieldAlert className="h-3 w-3" />
+                    Security check unavailable. Please try again later.
+                  </p>
+                )}
 
                 <Button type="submit" className="w-full mt-2" size="lg" loading={isSubmitting}>
                   <Mail className="h-4 w-4" />
