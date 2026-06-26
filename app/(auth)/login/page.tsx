@@ -21,7 +21,6 @@ export default function LoginPage() {
   const [showPassword, setShowPassword] = useState(false)
   const [turnstileToken, setTurnstileToken] = useState<string | null>(null)
   const [turnstileError, setTurnstileError] = useState(false)
-  const [turnstileKey, setTurnstileKey] = useState(0)
 
   const {
     register,
@@ -39,7 +38,6 @@ export default function LoginPage() {
 
   const handleTurnstileExpire = useCallback(() => {
     setTurnstileToken(null)
-    setTurnstileKey((k) => k + 1)
   }, [])
 
   const handleTurnstileError = useCallback(() => {
@@ -61,10 +59,8 @@ export default function LoginPage() {
       })
 
       if (!verifyRes.ok) {
-        const err = await verifyRes.json().catch(() => ({ error: 'Security check failed' }))
-        toast({ title: 'Verification failed', description: err.error === 'timeout-or-duplicate' ? 'Security check expired. Please try again.' : (err.error || 'Security check failed. Please try again.'), variant: 'destructive' })
+        toast({ title: 'Verification failed', description: 'Security check failed. Please try again.', variant: 'destructive' })
         setTurnstileToken(null)
-        setTurnstileKey((k) => k + 1)
         return
       }
     }
@@ -175,7 +171,6 @@ export default function LoginPage() {
               turnstileSiteKey ? (
                 <div className={cn({ 'border border-red-500 rounded-lg p-1': turnstileError })}>
                   <Turnstile
-                    key={turnstileKey}
                     sitekey={turnstileSiteKey}
                     onVerify={handleTurnstileVerify}
                     onExpire={handleTurnstileExpire}
