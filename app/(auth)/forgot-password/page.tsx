@@ -19,6 +19,7 @@ export default function ForgotPasswordPage() {
   const [sent, setSent] = useState(false)
   const [turnstileToken, setTurnstileToken] = useState<string | null>(null)
   const [turnstileError, setTurnstileError] = useState(false)
+  const [turnstileKey, setTurnstileKey] = useState(0)
 
   const {
     register,
@@ -36,6 +37,7 @@ export default function ForgotPasswordPage() {
 
   const handleTurnstileExpire = useCallback(() => {
     setTurnstileToken(null)
+    setTurnstileKey((k) => k + 1)
   }, [])
 
   const handleTurnstileError = useCallback(() => {
@@ -57,8 +59,10 @@ export default function ForgotPasswordPage() {
       })
 
       if (!verifyRes.ok) {
-        toast({ title: 'Verification failed', description: 'Security check failed. Please try again.', variant: 'destructive' })
+        const err = await verifyRes.json().catch(() => ({ error: 'Security check failed' }))
+        toast({ title: 'Verification failed', description: err.error === 'timeout-or-duplicate' ? 'Security check expired. Please try again.' : (err.error || 'Security check failed. Please try again.'), variant: 'destructive' })
         setTurnstileToken(null)
+        setTurnstileKey((k) => k + 1)
         return
       }
     }
@@ -145,6 +149,7 @@ export default function ForgotPasswordPage() {
                   turnstileSiteKey ? (
                     <div className={cn({ 'border border-red-500 rounded-lg p-1': turnstileError })}>
                       <Turnstile
+                        key={turnstileKey}
                         sitekey={turnstileSiteKey}
                         onVerify={handleTurnstileVerify}
                         onExpire={handleTurnstileExpire}
