@@ -3,6 +3,7 @@ import { z } from 'zod'
 export const loginSchema = z.object({
   email: z.string().email('Invalid email address'),
   password: z.string().min(6, 'Password must be at least 6 characters'),
+  turnstileToken: z.string().optional(),
 })
 
 export const signupSchema = z.object({
@@ -45,11 +46,13 @@ export const reminderSchema = z.object({
 
 export const forgotPasswordSchema = z.object({
   email: z.string().email('Invalid email address'),
+  turnstileToken: z.string().optional(),
 })
 
 export const updatePasswordSchema = z.object({
   password: z.string().min(6, 'Password must be at least 6 characters'),
   confirm_password: z.string(),
+  turnstileToken: z.string().optional(),
 }).refine((data) => data.password === data.confirm_password, {
   message: "Passwords don't match",
   path: ['confirm_password'],

@@ -12,29 +12,50 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { FormField } from '@/components/ui/helpers'
 import { useToast } from '@/components/ui/toast'
+import { TurnstileWidget } from '@/components/auth/TurnstileWidget'
+
+type SupabaseAuthCompat = {
+  getSessionFromUrl?: (options: { storeSession: boolean }) => Promise<unknown>
+  setSession?: (session: { access_token: string; refresh_token: string | null }) => Promise<unknown>
+}
 
 export default function UpdatePasswordPage() {
   const router = useRouter()
   const { toast } = useToast()
   const [showPassword, setShowPassword] = useState(false)
   const [success, setSuccess] = useState(false)
-  const [sessionHandled, setSessionHandled] = useState(false)
+  const [turnstileKey, setTurnstileKey] = useState(0)
+  const turnstileEnabled = process.env.NEXT_PUBLIC_TURNSTILE_ENABLED === 'true'
+  const turnstileSiteKey = process.env.NEXT_PUBLIC_TURNSTILE_SITE_KEY || ''
 
   const {
     register,
     handleSubmit,
+    setValue,
     formState: { errors, isSubmitting },
   } = useForm<UpdatePasswordInput>({ resolver: zodResolver(updatePasswordSchema) })
 
   async function onSubmit(data: UpdatePasswordInput) {
-    const supabase = createClient()
-    const { error } = await supabase.auth.updateUser({
-      password: data.password,
+    const response = await fetch('/api/auth/update-password', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(data),
     })
 
-    if (error) {
-      toast({ title: 'Error', description: error.message, variant: 'destructive' })
+    const result = await response.json()
+
+    if (!response.ok) {
+      toast({ title: 'Error', description: result.error || 'Unable to update password', variant: 'destructive' })
+      if (turnstileEnabled) {
+        setValue('turnstileToken', '')
+        setTurnstileKey((value) => value + 1)
+      }
       return
+    }
+
+    if (turnstileEnabled) {
+      setValue('turnstileToken', '')
+      setTurnstileKey((value) => value + 1)
     }
 
     setSuccess(true)
@@ -44,13 +65,14 @@ export default function UpdatePasswordPage() {
 
   useEffect(() => {
     const supabase = createClient()
+    const auth = supabase.auth as SupabaseAuthCompat
 
     ;(async () => {
       try {
-        if (typeof (supabase.auth as any).getSessionFromUrl === 'function') {
-          await (supabase.auth as any).getSessionFromUrl({ storeSession: true })
+        if (typeof auth.getSessionFromUrl === 'function') {
+          await auth.getSessionFromUrl({ storeSession: true })
         }
-      } catch (err: any) {
+      } catch {
         // ignore — getSessionFromUrl throws for invalid/expired tokens
       }
 
@@ -63,14 +85,12 @@ export default function UpdatePasswordPage() {
           const params = new URLSearchParams(hash.replace(/^#/, ''))
           const access_token = params.get('access_token')
           const refresh_token = params.get('refresh_token')
-          if (access_token && typeof (supabase.auth as any).setSession === 'function') {
-            await (supabase.auth as any).setSession({ access_token, refresh_token })
+          if (access_token && typeof auth.setSession === 'function') {
+            await auth.setSession({ access_token, refresh_token })
           }
         }
-      } catch (e) {
+      } catch {
         // ignore
-      } finally {
-        setSessionHandled(true)
       }
     })()
   }, [])
@@ -149,6 +169,19 @@ export default function UpdatePasswordPage() {
                     error={errors.confirm_password?.message}
                   />
                 </FormField>
+
+                <input type="hidden" {...register('turnstileToken')} />
+
+                {turnstileEnabled && (
+                  <FormField label="Security check" hint="Complete the Cloudflare Turnstile challenge before updating your password.">
+                    <TurnstileWidget
+                      key={turnstileKey}
+                      enabled={turnstileEnabled}
+                      siteKey={turnstileSiteKey}
+                      onTokenChange={(token) => setValue('turnstileToken', token || '', { shouldValidate: true })}
+                    />
+                  </FormField>
+                )}
 
                 <Button type="submit" className="w-full mt-2" size="lg" loading={isSubmitting}>
                   <KeyRound className="h-4 w-4" />

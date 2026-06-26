@@ -6,34 +6,49 @@ import { useRouter } from 'next/navigation'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { Bell, Eye, EyeOff, LogIn } from 'lucide-react'
-import { createClient } from '@/lib/supabase/client'
 import { loginSchema, type LoginInput } from '@/lib/types/schemas'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { FormField } from '@/components/ui/helpers'
 import { useToast } from '@/components/ui/toast'
+import { TurnstileWidget } from '@/components/auth/TurnstileWidget'
 
 export default function LoginPage() {
   const router = useRouter()
   const { toast } = useToast()
   const [showPassword, setShowPassword] = useState(false)
+  const [turnstileKey, setTurnstileKey] = useState(0)
+  const turnstileEnabled = process.env.NEXT_PUBLIC_TURNSTILE_ENABLED === 'true'
+  const turnstileSiteKey = process.env.NEXT_PUBLIC_TURNSTILE_SITE_KEY || ''
 
   const {
     register,
     handleSubmit,
+    setValue,
     formState: { errors, isSubmitting },
   } = useForm<LoginInput>({ resolver: zodResolver(loginSchema) })
 
   async function onSubmit(data: LoginInput) {
-    const supabase = createClient()
-    const { error } = await supabase.auth.signInWithPassword({
-      email: data.email,
-      password: data.password,
+    const response = await fetch('/api/auth/login', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(data),
     })
 
-    if (error) {
-      toast({ title: 'Login failed', description: error.message, variant: 'destructive' })
+    const result = await response.json()
+
+    if (!response.ok) {
+      toast({ title: 'Login failed', description: result.error || 'Unable to sign in', variant: 'destructive' })
+      if (turnstileEnabled) {
+        setValue('turnstileToken', '')
+        setTurnstileKey((value) => value + 1)
+      }
       return
+    }
+
+    if (turnstileEnabled) {
+      setValue('turnstileToken', '')
+      setTurnstileKey((value) => value + 1)
     }
 
     router.push('/')
@@ -120,6 +135,19 @@ export default function LoginPage() {
                 </button>
               </div>
             </FormField>
+
+            <input type="hidden" {...register('turnstileToken')} />
+
+            {turnstileEnabled && (
+              <FormField label="Security check" hint="Complete the Cloudflare Turnstile challenge before signing in.">
+                <TurnstileWidget
+                  key={turnstileKey}
+                  enabled={turnstileEnabled}
+                  siteKey={turnstileSiteKey}
+                  onTokenChange={(token) => setValue('turnstileToken', token || '', { shouldValidate: true })}
+                />
+              </FormField>
+            )}
 
             <div className="flex justify-end">
               <Link href="/forgot-password" className="text-sm text-indigo-600 hover:text-indigo-500">
