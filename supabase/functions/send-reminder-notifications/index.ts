@@ -4,6 +4,7 @@
 
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
 import nodemailer from 'npm:nodemailer@6.9.15'
+import { PublishCommand, SNSClient } from 'npm:@aws-sdk/client-sns@3'
 
 const SUPABASE_URL = Deno.env.get('SUPABASE_URL')!
 const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
@@ -15,6 +16,11 @@ const TWILIO_ACCOUNT_SID = Deno.env.get('TWILIO_ACCOUNT_SID')!
 const TWILIO_AUTH_TOKEN = Deno.env.get('TWILIO_AUTH_TOKEN')!
 const TWILIO_WHATSAPP_FROM = Deno.env.get('TWILIO_WHATSAPP_FROM')!
 const APP_FROM_EMAIL = Deno.env.get('APP_FROM_EMAIL') || 'noreply@remindflow.app'
+const AWS_REGION = Deno.env.get('AWS_REGION') || 'us-east-1'
+const AWS_ACCESS_KEY_ID = Deno.env.get('AWS_ACCESS_KEY_ID')
+const AWS_SECRET_ACCESS_KEY = Deno.env.get('AWS_SECRET_ACCESS_KEY')
+const SNS_SMS_SENDER_ID = Deno.env.get('SNS_SMS_SENDER_ID')
+const SNS_SMS_TYPE = Deno.env.get('SNS_SMS_TYPE') || 'Transactional'
 
 interface Profile {
   id: string
@@ -45,6 +51,18 @@ const mailer = nodemailer.createTransport({
     pass: SES_SMTP_PASS,
   },
 })
+
+// Si las secrets de AWS no están cargadas, el canal SMS se saltea en vez de romper el deploy.
+const snsClient =
+  AWS_ACCESS_KEY_ID && AWS_SECRET_ACCESS_KEY
+    ? new SNSClient({
+        region: AWS_REGION,
+        credentials: {
+          accessKeyId: AWS_ACCESS_KEY_ID,
+          secretAccessKey: AWS_SECRET_ACCESS_KEY,
+        },
+      })
+    : null
 
 /** Convierte "now" UTC al timezone del reminder y extrae fecha y hora local */
 function getLocalDateTimeInZone(now: Date, timezone: string): { date: string; time: string } {
@@ -169,6 +187,23 @@ Deno.serve(async (_req: Request) => {
           results.push({ channel: 'whatsapp', user: user.phone_number, status: 'error' })
         }
       }
+
+      // --- SMS via Amazon SNS ---
+      if (snsClient && isE164(user.phone_number)) {
+        try {
+          const out = await snsClient.send(
+            new PublishCommand({
+              PhoneNumber: user.phone_number.trim(),
+              Message: buildSmsBody(reminder, tz),
+              MessageAttributes: smsAttributes(),
+            }),
+          )
+          results.push({ channel: 'sms', user: user.phone_number, status: 'sent', data: { messageId: out.MessageId } })
+        } catch (e) {
+          console.error('SMS error:', e)
+          results.push({ channel: 'sms', user: user.phone_number, status: 'error' })
+        }
+      }
     }
 
     // Marcar como enviado
@@ -203,6 +238,38 @@ Deno.serve(async (_req: Request) => {
 
   return new Response(JSON.stringify({ processed: results.filter((r) => r.status === 'sent').length, results }))
 })
+
+// Duplicado a propósito de lib/notifications/sms.ts: este archivo corre en Deno
+// y no puede importar del árbol de Next.
+function isE164(phone: string | null | undefined): phone is string {
+  return !!phone && /^\+[1-9]\d{7,14}$/.test(phone.trim())
+}
+
+function buildSmsBody(reminder: Reminder, timezone: string): string {
+  const MAX_SMS_LENGTH = 300
+  const lines = [
+    `RemindFlow: ${reminder.title}`,
+    reminder.description || '',
+    `${reminder.reminder_date} ${reminder.reminder_time.slice(0, 5)} (${timezone})`,
+  ].filter(Boolean)
+
+  const body = lines.join('\n')
+  // '...' en vez de '…': el carácter unicode fuerza codificación UCS-2 (70 chars/segmento).
+  return body.length > MAX_SMS_LENGTH ? `${body.slice(0, MAX_SMS_LENGTH - 3)}...` : body
+}
+
+function smsAttributes(): Record<string, { DataType: string; StringValue: string }> {
+  const attrs: Record<string, { DataType: string; StringValue: string }> = {
+    'AWS.SNS.SMS.SMSType': { DataType: 'String', StringValue: SNS_SMS_TYPE },
+  }
+
+  // SenderID no está soportado en todos los países (ej. US/CA) — solo si se configuró.
+  if (SNS_SMS_SENDER_ID) {
+    attrs['AWS.SNS.SMS.SenderID'] = { DataType: 'String', StringValue: SNS_SMS_SENDER_ID }
+  }
+
+  return attrs
+}
 
 function buildEmailHtml(reminder: Reminder, user: Profile, timezone: string): string {
   return `
