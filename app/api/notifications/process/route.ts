@@ -1,9 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createAdminClient } from '@/lib/supabase/server'
 import nodemailer from 'nodemailer'
+import { buildSmsBody, isE164, isSnsConfigured, sendSms } from '@/lib/notifications/sms'
 
 // POST /api/notifications/process
-// Procesa reminders pendientes y envía email + WhatsApp
+// Procesa reminders pendientes y envía email + WhatsApp + SMS
 // Para testing: pegar en el browser o hacer curl
 
 interface Profile {
@@ -132,6 +133,30 @@ export async function POST(request: NextRequest) {
           reason: !twilioSid ? 'TWILIO_ACCOUNT_SID not set' : !user.phone_number ? 'User has no phone_number' : 'TWILIO_WHATSAPP_FROM not set',
         })
       }
+
+      // --- SMS via Amazon SNS ---
+      if (isSnsConfigured() && isE164(user.phone_number)) {
+        try {
+          const { messageId } = await sendSms(
+            user.phone_number,
+            buildSmsBody(reminder as never, tz)
+          )
+          results.push({ channel: 'sms', user: user.phone_number, status: 'sent', data: { messageId } })
+        } catch (e) {
+          results.push({ channel: 'sms', user: user.phone_number, status: 'error', error: String(e) })
+        }
+      } else {
+        results.push({
+          channel: 'sms',
+          user: user.phone_number || 'no phone',
+          status: 'skipped',
+          reason: !isSnsConfigured()
+            ? 'AWS credentials not set'
+            : !user.phone_number
+              ? 'User has no phone_number'
+              : 'phone_number is not E.164',
+        })
+      }
     }
 
     // Marcar como sent
@@ -168,6 +193,10 @@ export async function GET() {
       TWILIO_ACCOUNT_SID: process.env.TWILIO_ACCOUNT_SID ? '✅ set' : '❌ missing',
       TWILIO_AUTH_TOKEN: process.env.TWILIO_AUTH_TOKEN ? '✅ set' : '❌ missing',
       TWILIO_WHATSAPP_FROM: process.env.TWILIO_WHATSAPP_FROM ? '✅ set' : '❌ missing',
+      AWS_REGION: process.env.AWS_REGION || '❌ missing (defaults to us-east-1)',
+      AWS_ACCESS_KEY_ID: process.env.AWS_ACCESS_KEY_ID ? '✅ set' : '❌ missing',
+      AWS_SECRET_ACCESS_KEY: process.env.AWS_SECRET_ACCESS_KEY ? '✅ set' : '❌ missing',
+      SNS_SMS_SENDER_ID: process.env.SNS_SMS_SENDER_ID || '(not set)',
       APP_FROM_EMAIL: process.env.APP_FROM_EMAIL || 'noreply@remindflow.app',
     },
   })
