@@ -88,7 +88,7 @@ export default function UserForm({ user }: Props) {
         </FormField>
       )}
 
-      <FormField label="Phone number (WhatsApp + SMS)" error={errors.phone_number?.message} hint="International format required, e.g. +5491123456789">
+      <FormField label="Phone number" error={errors.phone_number?.message} hint="International format required, e.g. +5491123456789">
         <Input type="tel" placeholder="+1 555 000 0000" {...register('phone_number')} />
       </FormField>
 

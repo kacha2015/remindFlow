@@ -70,12 +70,12 @@ export default function LoginPage() {
             Manage reminders.<br />Never miss a moment.
           </h1>
           <p className="text-indigo-200 text-lg leading-relaxed">
-            Schedule, assign and track reminders with automatic notifications via email and WhatsApp.
+            Schedule, assign and track reminders with automatic email notifications.
           </p>
 
           <div className="grid grid-cols-2 gap-4 pt-4">
             {[
-              { label: 'Email + WhatsApp', desc: 'Multi-channel alerts' },
+              { label: 'Email alerts', desc: 'Automatic notifications' },
               { label: 'Recurring', desc: 'Daily, weekly, monthly' },
               { label: 'Team assign', desc: 'Multi-user reminders' },
               { label: 'Role-based', desc: 'Admin & user access' },

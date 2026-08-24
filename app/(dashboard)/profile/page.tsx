@@ -88,7 +88,7 @@ export default async function ProfilePage() {
               />
               <ProfileDetailItem
                 icon={<Phone className="h-4 w-4" />}
-                label="WhatsApp"
+                label="Phone"
                 value={p.phone_number || 'Not set'}
                 tone={p.phone_number ? 'green' : 'gray'}
               />
