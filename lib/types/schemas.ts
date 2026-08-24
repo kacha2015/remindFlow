@@ -1,7 +1,7 @@
 import { z } from 'zod'
 
-// Amazon SNS exige E.164 para publicar SMS. El campo es opcional: los forms
-// mandan '' cuando está vacío, así que lo normalizamos a null.
+// Teléfono en formato E.164. El campo es opcional: los forms mandan ''
+// cuando está vacío, así que lo normalizamos a null.
 const E164 = /^\+[1-9]\d{7,14}$/
 
 const phoneNumberSchema = z
