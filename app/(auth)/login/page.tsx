@@ -18,8 +18,8 @@ export default function LoginPage() {
   const { toast } = useToast()
   const [showPassword, setShowPassword] = useState(false)
   const [turnstileKey, setTurnstileKey] = useState(0)
-  const turnstileEnabled = process.env.NEXT_PUBLIC_TURNSTILE_ENABLED === 'true'
-  const turnstileSiteKey = process.env.NEXT_PUBLIC_TURNSTILE_SITE_KEY || ''
+  const turnstileEnabled = process.env.TURNSTILE_ENABLED === 'true'
+  const turnstileSiteKey = process.env.TURNSTILE_SITE_KEY || ''
 
   const {
     register,
