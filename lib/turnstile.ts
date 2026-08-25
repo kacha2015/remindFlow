@@ -1,7 +1,7 @@
 const TURNSTILE_VERIFY_URL = 'https://challenges.cloudflare.com/turnstile/v0/siteverify'
 
 export function isTurnstileEnabled() {
-  return (process.env.TURNSTILE_ENABLED ?? process.env.NEXT_PUBLIC_TURNSTILE_ENABLED ?? 'false') === 'true'
+  return process.env.TURNSTILE_ENABLED === 'true'
 }
 
 export async function verifyTurnstileToken(token: string | null | undefined, ipAddress?: string) {
