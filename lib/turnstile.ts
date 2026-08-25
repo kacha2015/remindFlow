@@ -9,8 +9,11 @@ export async function verifyTurnstileToken(token: string | null | undefined, ipA
     return { success: true }
   }
 
-  const secret = process.env.TURNSTILE_SECRET_KEY
+  // .trim(): un salto de línea o espacio pegado al copiar la clave en el panel
+  // del hosting hace que Cloudflare responda invalid-input-secret.
+  const secret = process.env.TURNSTILE_SECRET_KEY?.trim()
   if (!secret) {
+    console.error('[turnstile] TURNSTILE_SECRET_KEY no está seteada')
     return { success: false, error: 'Turnstile secret key is missing' }
   }
 
@@ -32,17 +35,21 @@ export async function verifyTurnstileToken(token: string | null | undefined, ipA
     body,
   })
 
-  if (!response.ok) {
+  // Cloudflare devuelve 400 (no 200) cuando el secret es inválido, con el
+  // detalle en error-codes: hay que leer el body igual que en el caso 200.
+  const raw = await response.text()
+  let result: { success?: boolean; 'error-codes'?: string[] } | null = null
+  try {
+    result = JSON.parse(raw)
+  } catch {
+    console.error('[turnstile] siteverify respondió HTTP', response.status, 'con body no-JSON:', raw)
     return { success: false, error: 'Turnstile verification failed' }
   }
 
-  const result = await response.json() as { success?: boolean; 'error-codes'?: string[] }
-
-  if (!result.success) {
-    return {
-      success: false,
-      error: result['error-codes']?.[0] || 'Turnstile verification failed',
-    }
+  if (!result?.success) {
+    const code = result?.['error-codes']?.[0]
+    console.error('[turnstile] verificación rechazada (HTTP', response.status + '):', raw)
+    return { success: false, error: code || 'Turnstile verification failed' }
   }
 
   return { success: true }
