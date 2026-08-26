@@ -48,16 +48,46 @@ export const createUserSchema = z.object({
   password: z.string().min(6, 'Password must be at least 6 characters'),
 })
 
+// Fecha/hora opcional (rango): los forms mandan '' cuando está vacía.
+const optionalDateSchema = z
+  .union([z.string(), z.null()])
+  .optional()
+  .transform((value) => {
+    const trimmed = (value ?? '').trim()
+    return trimmed === '' ? null : trimmed
+  })
+
 export const reminderSchema = z.object({
   title: z.string().min(1, 'Title is required').max(200, 'Title too long'),
   description: z.string().optional().nullable(),
   reminder_date: z.string().min(1, 'Date is required'),
+  end_date: optionalDateSchema,
+  end_time: optionalDateSchema,
   reminder_time: z.string().min(1, 'Time is required'),
   timezone: z.string().default('UTC'),
   status: z.enum(['pending', 'sent', 'cancelled']).default('pending'),
    recurrence: z.enum(['none', 'hourly', 'daily', 'weekly', 'monthly']).default('none'),
   assigned_user_ids: z.array(z.string()).min(1, 'At least one user must be assigned'),
 })
+  .refine((data) => !data.end_date || data.recurrence !== 'none', {
+    message: 'An end date only applies to recurring reminders',
+    path: ['end_date'],
+  })
+  .refine((data) => !data.end_date || data.end_date >= data.reminder_date, {
+    message: 'End date must be on or after the start date',
+    path: ['end_date'],
+  })
+  .refine(
+    // Rango de un solo día: la hora de fin no puede ser anterior a la de inicio
+    (data) =>
+      !data.end_time ||
+      data.end_date !== data.reminder_date ||
+      data.end_time >= data.reminder_time,
+    {
+      message: 'End time must be after the start time on a single-day range',
+      path: ['end_time'],
+    }
+  )
 
 export const forgotPasswordSchema = z.object({
   email: z.string().email('Invalid email address'),

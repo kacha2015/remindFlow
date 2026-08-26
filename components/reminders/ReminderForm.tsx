@@ -2,7 +2,7 @@
 
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
-import { useForm } from 'react-hook-form'
+import { useForm, useWatch } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { Check, X, Users, UserMinus } from 'lucide-react'
 import { reminderSchema, type ReminderInput } from '@/lib/types/schemas'
@@ -36,6 +36,7 @@ export default function ReminderForm({ users, reminder }: Props) {
     register,
     handleSubmit,
     setValue,
+    control,
     formState: { errors, isSubmitting },
   } = useForm<ReminderInput>({
     resolver: zodResolver(reminderSchema) as never,
@@ -43,6 +44,8 @@ export default function ReminderForm({ users, reminder }: Props) {
       title: reminder?.title || '',
       description: reminder?.description || '',
       reminder_date: reminder?.reminder_date || '',
+      end_date: reminder?.end_date || '',
+      end_time: reminder?.end_time?.slice(0, 5) || '',
       reminder_time: reminder?.reminder_time?.slice(0, 5) || '',
       timezone: reminder?.timezone || browserTimezone,
       status: reminder?.status || 'pending',
@@ -50,6 +53,15 @@ export default function ReminderForm({ users, reminder }: Props) {
       assigned_user_ids: defaultAssigned,
     },
   })
+
+  const recurrence = useWatch({ control, name: 'recurrence' })
+  const startDate = useWatch({ control, name: 'reminder_date' })
+  const endDate = useWatch({ control, name: 'end_date' })
+  const isRecurring = recurrence !== 'none'
+
+  // Los campos del rango no están en el tipo estricto de errors de RHF
+  const fieldError = (name: string) =>
+    (errors as Record<string, { message?: string }>)[name]?.message
 
   function toggleUser(uid: string) {
     setSelectedUsers((prev) => {
@@ -88,7 +100,14 @@ export default function ReminderForm({ users, reminder }: Props) {
   }
 
   async function onSubmit(data: ReminderInput) {
-    const payload = { ...data, assigned_user_ids: selectedUsers }
+    // El rango sólo tiene sentido con recurrencia, y la hora de fin sólo con fecha de fin
+    const rangeEndDate = data.recurrence === 'none' ? null : data.end_date
+    const payload = {
+      ...data,
+      end_date: rangeEndDate,
+      end_time: rangeEndDate ? data.end_time : null,
+      assigned_user_ids: selectedUsers,
+    }
 
     const url = isEdit ? `/api/reminders/${reminder!.id}` : '/api/reminders'
     const method = isEdit ? 'PATCH' : 'POST'
@@ -128,7 +147,7 @@ export default function ReminderForm({ users, reminder }: Props) {
       </FormField>
 
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-        <FormField label="Date" error={errors.reminder_date?.message} required>
+        <FormField label={isRecurring ? 'Start date' : 'Date'} error={errors.reminder_date?.message} required>
           <Input type="date" {...register('reminder_date')} error={errors.reminder_date?.message} />
         </FormField>
 
@@ -161,6 +180,42 @@ export default function ReminderForm({ users, reminder }: Props) {
             <option value="weekly">Weekly</option>
             <option value="monthly">Monthly</option>
           </Select>
+        </FormField>
+      </div>
+
+      {/* Rango de fechas — sólo aplica a reminders recurrentes */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+        <FormField
+          label="End date"
+          error={fieldError('end_date')}
+          hint={
+            isRecurring
+              ? 'Optional — leave empty to repeat indefinitely'
+              : 'Pick a recurrence above to schedule a date range'
+          }
+        >
+          <Input
+            type="date"
+            min={startDate || undefined}
+            disabled={!isRecurring}
+            className={!isRecurring ? 'bg-gray-50' : undefined}
+            {...register('end_date')}
+            error={fieldError('end_date')}
+          />
+        </FormField>
+
+        <FormField
+          label="End time"
+          error={fieldError('end_time')}
+          hint={endDate ? 'Optional — defaults to the end of that day' : 'Set an end date first'}
+        >
+          <Input
+            type="time"
+            disabled={!isRecurring || !endDate}
+            className={!isRecurring || !endDate ? 'bg-gray-50' : undefined}
+            {...register('end_time')}
+            error={fieldError('end_time')}
+          />
         </FormField>
       </div>
 

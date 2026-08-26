@@ -46,11 +46,89 @@ export function getStatusColor(status: string): string {
 export function getRecurrenceLabel(recurrence: string): string {
   switch (recurrence) {
     case 'none': return 'No recurrence'
+    case 'hourly': return 'Hourly'
     case 'daily': return 'Daily'
     case 'weekly': return 'Weekly'
     case 'monthly': return 'Monthly'
     default: return recurrence
   }
+}
+
+/** Normaliza 'HH:MM' o 'HH:MM:SS' a 'HH:MM' para comparar horas. */
+export function toHHMM(timeStr: string): string {
+  return timeStr.slice(0, 5)
+}
+
+/** Texto del rango de un reminder recurrente. */
+export function formatDateRange(
+  startDate: string,
+  endDate: string | null,
+  timezone?: string,
+  endTime?: string | null
+): string {
+  const start = formatDate(startDate, timezone)
+  if (!endDate) return `${start} — no end date`
+  const end = formatDate(endDate, timezone)
+  return `${start} — ${end}${endTime ? ` at ${formatTime(endTime, timezone)}` : ''}`
+}
+
+/**
+ * ¿La ocurrencia cae dentro del rango programado?
+ * end_date null => sin límite. end_time null => vale todo el día de end_date.
+ */
+export function isWithinRange(
+  date: string,
+  time: string,
+  endDate?: string | null,
+  endTime?: string | null
+): boolean {
+  if (!endDate) return true
+  if (date > endDate) return false
+  if (date < endDate) return true
+  return !endTime || toHHMM(time) <= toHHMM(endTime)
+}
+
+/**
+ * Siguiente ocurrencia de un reminder recurrente.
+ * Devuelve null si no hay recurrencia o si la siguiente cae fuera del rango (end_date + end_time).
+ */
+export function getNextOccurrence(
+  dateStr: string,
+  timeStr: string,
+  recurrence: string,
+  endDate?: string | null,
+  endTime?: string | null
+): { date: string; time: string } | null {
+  // timeStr puede venir como 'HH:MM' o 'HH:MM:SS'
+  const [h = '00', m = '00', sec = '00'] = timeStr.split(':')
+  const date = new Date(`${dateStr}T${h}:${m}:${sec.slice(0, 2)}Z`)
+
+  switch (recurrence) {
+    case 'hourly':
+      date.setUTCHours(date.getUTCHours() + 1)
+      break
+    case 'daily':
+      date.setUTCDate(date.getUTCDate() + 1)
+      break
+    case 'weekly':
+      date.setUTCDate(date.getUTCDate() + 7)
+      break
+    case 'monthly':
+      date.setUTCMonth(date.getUTCMonth() + 1)
+      break
+    default:
+      return null
+  }
+
+  const next = {
+    date: date.toISOString().slice(0, 10),
+    time: date.toISOString().slice(11, 19),
+  }
+
+  // Fuera del rango programado: la serie termina acá
+  if (!isWithinRange(next.date, next.time, endDate, endTime)) return null
+
+  return next
 }
 
 export function getInitials(name: string): string {

@@ -11,7 +11,7 @@ import { Input } from '@/components/ui/input'
 import { ConfirmDialog } from '@/components/ui/confirm-dialog'
 import { EmptyState } from '@/components/ui/helpers'
 import { useToast } from '@/components/ui/toast'
-import { formatDate, formatTime, getRecurrenceLabel } from '@/lib/utils'
+import { formatDate, formatDateRange, formatTime, getRecurrenceLabel } from '@/lib/utils'
 
 interface Props {
   reminders: Reminder[]
@@ -138,7 +138,9 @@ export default function ReminderListClient({ reminders: initial, isAdmin, userId
                   )}
                   <div className="flex flex-wrap items-center gap-4 text-xs text-gray-500">
                     <span className="font-medium text-gray-700">
-                      {formatDate(reminder.reminder_date)} at {formatTime(reminder.reminder_time)}
+                      {reminder.recurrence !== 'none'
+                        ? `${formatDateRange(reminder.reminder_date, reminder.end_date, undefined, reminder.end_time)} · from ${formatTime(reminder.reminder_time)}`
+                        : `${formatDate(reminder.reminder_date)} at ${formatTime(reminder.reminder_time)}`}
                     </span>
                     {isAdmin && reminder.assigned_users && (
                       <span className="flex items-center gap-1">

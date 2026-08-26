@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createAdminClient } from '@/lib/supabase/server'
+import { getNextOccurrence, isWithinRange, toHHMM } from '@/lib/utils'
 import nodemailer from 'nodemailer'
 
 // POST /api/notifications/process
@@ -58,6 +59,20 @@ export async function POST(request: NextRequest) {
     const localMin = localNow.getMinutes().toString().padStart(2, '0')
     const localTime = `${localHour}:${localMin}`
 
+    // Rango terminado: el reminder nunca volverá a disparar, lo cerramos.
+    const endDateValue = ((reminder as Record<string, unknown>).end_date as string | null) ?? null
+    const endTimeValue = ((reminder as Record<string, unknown>).end_time as string | null) ?? null
+    if (endDateValue && !isWithinRange(localDate, localTime, endDateValue, endTimeValue)) {
+      await supabase.from('reminders').update({ status: 'sent' }).eq('id', reminder.id)
+      results.push({
+        id: reminder.id,
+        title: (reminder as Record<string, unknown>).title,
+        status: 'expired',
+        reason: `Range ended ${endDateValue}${endTimeValue ? ` ${toHHMM(endTimeValue)}` : ''} — local now is ${localDate} ${localTime} (${tz})`,
+      })
+      continue
+    }
+
     const reminderTime = (reminder as Record<string, unknown>).reminder_time as string
     const reminderTimeHHMM = reminderTime.slice(0, 5)
 
@@ -101,6 +116,44 @@ export async function POST(request: NextRequest) {
     // Marcar como sent
     await supabase.from('reminders').update({ status: 'sent' }).eq('id', reminder.id)
 
+    // Recurrencia: crear siguiente ocurrencia si sigue dentro del rango programado
+    const recurrence = (reminder as Record<string, unknown>).recurrence as string
+
+    if (recurrence !== 'none') {
+      const next = getNextOccurrence(reminder.reminder_date, reminderTime, recurrence, endDateValue, endTimeValue)
+
+      if (next) {
+        const { data: newReminder } = await supabase
+          .from('reminders')
+          .insert({
+            title: (reminder as Record<string, unknown>).title,
+            description: (reminder as Record<string, unknown>).description,
+            reminder_date: next.date,
+            end_date: endDateValue,
+            end_time: endTimeValue,
+            reminder_time: next.time,
+            timezone: tz,
+            status: 'pending',
+            recurrence,
+            created_by: (reminder as Record<string, unknown>).created_by,
+          })
+          .select()
+          .single()
+
+        if (newReminder && users.length > 0) {
+          await supabase.from('reminder_users').insert(
+            users.map((u) => ({ reminder_id: newReminder.id, user_id: u.id }))
+          )
+        }
+      } else {
+        results.push({
+          id: reminder.id,
+          status: 'series_ended',
+          reason: `Range end ${endDateValue}${endTimeValue ? ` ${toHHMM(endTimeValue)}` : ''} reached`,
+        })
+      }
+    }
+
     results.push({ id: reminder.id, title: (reminder as Record<string, unknown>).title, status: 'sent' })
   }
 
@@ -118,7 +171,7 @@ export async function GET() {
 
   const { data: reminders } = await supabase
     .from('reminders')
-    .select('id, title, reminder_date, reminder_time, timezone, status')
+    .select('id, title, reminder_date, end_date, reminder_time, end_time, recurrence, timezone, status')
     .eq('status', 'pending')
     .order('reminder_date', { ascending: false })
 
@@ -154,6 +207,7 @@ function buildEmailHtml(reminder: Record<string, unknown>, user: Profile, timezo
           📅 <strong>Date:</strong> ${reminder.reminder_date}<br>
           🕐 <strong>Time:</strong> ${reminder.reminder_time} <span style="color:#6b7280;">(${timezone})</span>
           ${reminder.recurrence !== 'none' ? `<br>🔁 <strong>Recurrence:</strong> ${reminder.recurrence}` : ''}
+          ${reminder.recurrence !== 'none' && reminder.end_date ? `<br>📆 <strong>Repeats until:</strong> ${reminder.end_date}${reminder.end_time ? ` ${toHHMM(reminder.end_time as string)}` : ''}` : ''}
         </p>
       </div>
       <p style="color:#9ca3af;font-size:12px;text-align:center;margin:0;">Automated notification from RemindFlow</p>

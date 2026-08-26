@@ -18,6 +18,8 @@ export interface Reminder {
   title: string
   description: string | null
   reminder_date: string
+  end_date: string | null
+  end_time: string | null
   reminder_time: string
   timezone: string
   status: ReminderStatus

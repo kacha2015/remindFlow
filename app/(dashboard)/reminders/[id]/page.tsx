@@ -6,7 +6,7 @@ import { ArrowLeft, Edit, Users, Clock, RefreshCw, CheckCircle, XCircle } from '
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Avatar } from '@/components/ui/avatar'
-import { formatDate, formatTime, getRecurrenceLabel } from '@/lib/utils'
+import { formatDate, formatDateRange, formatTime, getRecurrenceLabel } from '@/lib/utils'
 import ReminderStatusUpdate from './status-update'
 
 export default async function ReminderDetailPage({ params }: { params: Promise<{ id: string }> }) {
@@ -86,8 +86,14 @@ export default async function ReminderDetailPage({ params }: { params: Promise<{
 
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-sm">
             <div className="bg-gray-50 rounded-lg p-3">
-              <p className="text-xs text-gray-500 uppercase tracking-wide mb-1">Date</p>
-              <p className="font-semibold text-gray-900">{formatDate(reminder.reminder_date)}</p>
+              <p className="text-xs text-gray-500 uppercase tracking-wide mb-1">
+                {reminder.recurrence !== 'none' ? 'Date range' : 'Date'}
+              </p>
+              <p className="font-semibold text-gray-900">
+                {reminder.recurrence !== 'none'
+                  ? formatDateRange(reminder.reminder_date, reminder.end_date, undefined, reminder.end_time)
+                  : formatDate(reminder.reminder_date)}
+              </p>
             </div>
             <div className="bg-gray-50 rounded-lg p-3">
               <p className="text-xs text-gray-500 uppercase tracking-wide mb-1">Time</p>
