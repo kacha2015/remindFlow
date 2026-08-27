@@ -1,6 +1,23 @@
 export type Role = 'admin' | 'user'
 export type ReminderStatus = 'pending' | 'sent' | 'cancelled'
-export type RecurrenceType = 'none' | 'hourly' | 'daily' | 'weekly' | 'monthly'
+export type RecurrenceType =
+  | 'none'
+  | 'every_5_min'
+  | 'every_10_min'
+  | 'every_15_min'
+  | 'every_30_min'
+  | 'hourly'
+  | 'daily'
+  | 'weekly'
+  | 'monthly'
+
+/** Recurrencias con intervalo de minutos: exigen un rango de fin acotado. */
+export const MINUTE_RECURRENCES: RecurrenceType[] = [
+  'every_5_min',
+  'every_10_min',
+  'every_15_min',
+  'every_30_min',
+]
 
 export interface Profile {
   id: string
@@ -18,6 +35,8 @@ export interface Reminder {
   title: string
   description: string | null
   reminder_date: string
+  end_date: string | null
+  end_time: string | null
   reminder_time: string
   timezone: string
   status: ReminderStatus

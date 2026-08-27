@@ -25,7 +25,9 @@ interface Reminder {
   title: string
   description: string | null
   reminder_date: string
+  end_date: string | null
   reminder_time: string
+  end_time: string | null
   timezone: string
   status: string
   recurrence: string
@@ -88,6 +90,26 @@ Deno.serve(async (_req: Request) => {
   const tomorrow = new Date(now)
   tomorrow.setUTCDate(tomorrow.getUTCDate() + 1)
 
+  // Cierre automático: reminders cuyo rango de fechas ya terminó y siguen pendientes
+  // (nunca dispararon, o el rango se acortó después de crearlos).
+  const { data: expirable } = await supabase
+    .from('reminders')
+    .select('id, end_date, end_time, timezone')
+    .eq('status', 'pending')
+    .not('end_date', 'is', null)
+    .lte('end_date', tomorrow.toISOString().slice(0, 10))
+
+  const expiredIds = (expirable ?? [])
+    .filter((r: { end_date: string | null; end_time: string | null; timezone: string | null }) => {
+      const { date: localDate, time: localTime } = getLocalDateTimeInZone(now, r.timezone || 'UTC')
+      return !isWithinRange(localDate, localTime, r.end_date, r.end_time)
+    })
+    .map((r: { id: string }) => r.id)
+
+  if (expiredIds.length > 0) {
+    await supabase.from('reminders').update({ status: 'sent' }).in('id', expiredIds)
+  }
+
   const { data: reminders, error } = await supabase
     .from('reminders')
     .select(`
@@ -106,7 +128,7 @@ Deno.serve(async (_req: Request) => {
   }
 
   if (!reminders || reminders.length === 0) {
-    return new Response(JSON.stringify({ message: 'No pending reminders in window', count: 0 }))
+    return new Response(JSON.stringify({ message: 'No pending reminders in window', count: 0, expired: expiredIds.length }))
   }
 
   const results = []
@@ -145,9 +167,15 @@ Deno.serve(async (_req: Request) => {
     // Marcar como enviado
     await supabase.from('reminders').update({ status: 'sent' }).eq('id', reminder.id)
 
-    // Recurrencia: crear siguiente ocurrencia
+    // Recurrencia: crear siguiente ocurrencia (si sigue dentro del rango programado)
     if (reminder.recurrence !== 'none') {
-      const nextOccurrence = getNextOccurrence(reminder.reminder_date, reminder.reminder_time, reminder.recurrence)
+      const nextOccurrence = getNextOccurrence(
+        reminder.reminder_date,
+        reminder.reminder_time,
+        reminder.recurrence,
+        reminder.end_date,
+        reminder.end_time,
+      )
       if (nextOccurrence) {
         const { data: newReminder } = await supabase
           .from('reminders')
@@ -155,7 +183,9 @@ Deno.serve(async (_req: Request) => {
             title: reminder.title,
             description: reminder.description,
             reminder_date: nextOccurrence.date,
+            end_date: reminder.end_date,
             reminder_time: nextOccurrence.time,
+            end_time: reminder.end_time,
             timezone: reminder.timezone,
             status: 'pending',
             recurrence: reminder.recurrence,
@@ -172,7 +202,11 @@ Deno.serve(async (_req: Request) => {
     }
   }
 
-  return new Response(JSON.stringify({ processed: results.filter((r) => r.status === 'sent').length, results }))
+  return new Response(JSON.stringify({
+    processed: results.filter((r) => r.status === 'sent').length,
+    expired: expiredIds.length,
+    results,
+  }))
 })
 
 function buildEmailHtml(reminder: Reminder, user: Profile, timezone: string): string {
@@ -198,6 +232,7 @@ function buildEmailHtml(reminder: Reminder, user: Profile, timezone: string): st
           📅 <strong>Date:</strong> ${reminder.reminder_date}<br>
           🕐 <strong>Time:</strong> ${reminder.reminder_time} <span style="color:#6b7280;">(${timezone})</span>
           ${reminder.recurrence !== 'none' ? `<br>🔁 <strong>Recurrence:</strong> ${reminder.recurrence}` : ''}
+          ${reminder.recurrence !== 'none' && reminder.end_date ? `<br>📆 <strong>Repeats until:</strong> ${reminder.end_date}${reminder.end_time ? ` ${reminder.end_time.slice(0, 5)}` : ''}` : ''}
         </p>
       </div>
       <p style="color:#9ca3af;font-size:12px;text-align:center;margin:0;">
@@ -209,10 +244,45 @@ function buildEmailHtml(reminder: Reminder, user: Profile, timezone: string): st
 </html>`
 }
 
-function getNextOccurrence(dateStr: string, timeStr: string, recurrence: string): { date: string; time: string } | null {
+/**
+ * ¿La ocurrencia cae dentro del rango programado?
+ * end_date null => sin límite. end_time null => vale todo el día de end_date.
+ * Espejo de isWithinRange en lib/utils.ts (esta función corre en Deno y no puede importarlo).
+ */
+function isWithinRange(
+  date: string,
+  time: string,
+  endDate: string | null,
+  endTime: string | null,
+): boolean {
+  if (!endDate) return true
+  if (date > endDate) return false
+  if (date < endDate) return true
+  return !endTime || time.slice(0, 5) <= endTime.slice(0, 5)
+}
+
+function getNextOccurrence(
+  dateStr: string,
+  timeStr: string,
+  recurrence: string,
+  endDate: string | null,
+  endTime: string | null,
+): { date: string; time: string } | null {
   const date = new Date(`${dateStr}T${timeStr}Z`)
 
   switch (recurrence) {
+    case 'every_5_min':
+      date.setUTCMinutes(date.getUTCMinutes() + 5)
+      break
+    case 'every_10_min':
+      date.setUTCMinutes(date.getUTCMinutes() + 10)
+      break
+    case 'every_15_min':
+      date.setUTCMinutes(date.getUTCMinutes() + 15)
+      break
+    case 'every_30_min':
+      date.setUTCMinutes(date.getUTCMinutes() + 30)
+      break
     case 'hourly':
       date.setUTCHours(date.getUTCHours() + 1)
       break
@@ -229,8 +299,13 @@ function getNextOccurrence(dateStr: string, timeStr: string, recurrence: string)
       return null
   }
 
-  return {
+  const next = {
     date: date.toISOString().slice(0, 10),
     time: date.toISOString().slice(11, 19),
   }
+
+  // Fuera del rango programado: la serie termina acá
+  if (!isWithinRange(next.date, next.time, endDate, endTime)) return null
+
+  return next
 }
