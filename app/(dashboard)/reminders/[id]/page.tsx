@@ -6,7 +6,7 @@ import { ArrowLeft, Edit, Users, Clock, RefreshCw, CheckCircle, XCircle } from '
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Avatar } from '@/components/ui/avatar'
-import { formatDate, formatDateRange, formatTime, getRecurrenceLabel } from '@/lib/utils'
+import { formatDate, formatDateRange, formatTime, formatTimestamp, getRecurrenceLabel } from '@/lib/utils'
 import ReminderStatusUpdate from './status-update'
 
 export default async function ReminderDetailPage({ params }: { params: Promise<{ id: string }> }) {
@@ -100,13 +100,27 @@ export default async function ReminderDetailPage({ params }: { params: Promise<{
               <p className="font-semibold text-gray-900">{formatTime(reminder.reminder_time)}</p>
             </div>
             <div className="bg-gray-50 rounded-lg p-3">
+              <p className="text-xs text-gray-500 uppercase tracking-wide mb-1">Timezone</p>
+              <p className="font-semibold text-gray-900">{reminder.timezone || 'UTC'}</p>
+            </div>
+            <div className="bg-gray-50 rounded-lg p-3">
               <p className="text-xs text-gray-500 uppercase tracking-wide mb-1">Recurrence</p>
               <p className="font-semibold text-gray-900">{getRecurrenceLabel(reminder.recurrence)}</p>
             </div>
             <div className="bg-gray-50 rounded-lg p-3">
               <p className="text-xs text-gray-500 uppercase tracking-wide mb-1">Created by</p>
               <p className="font-semibold text-gray-900">{reminder.creator?.full_name || 'Unknown'}</p>
+              {reminder.creator?.email && (
+                <p className="text-xs text-gray-500 truncate">{reminder.creator.email}</p>
+              )}
             </div>
+          </div>
+
+          <div className="mt-4 flex flex-wrap gap-x-4 gap-y-1 text-xs text-gray-400">
+            <span>Created {formatTimestamp(reminder.created_at)}</span>
+            {reminder.updated_at !== reminder.created_at && (
+              <span>Last updated {formatTimestamp(reminder.updated_at)}</span>
+            )}
           </div>
         </div>
 

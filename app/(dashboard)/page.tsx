@@ -175,6 +175,11 @@ export default async function DashboardPage({
             >
               <option value="all">All types</option>
               <option value="none">One-time</option>
+              <option value="every_5_min">Every 5 minutes</option>
+              <option value="every_10_min">Every 10 minutes</option>
+              <option value="every_15_min">Every 15 minutes</option>
+              <option value="every_30_min">Every 30 minutes</option>
+              <option value="hourly">Hourly</option>
               <option value="daily">Daily</option>
               <option value="weekly">Weekly</option>
               <option value="monthly">Monthly</option>

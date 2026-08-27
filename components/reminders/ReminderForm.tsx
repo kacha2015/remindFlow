@@ -6,7 +6,7 @@ import { useForm, useWatch } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { Check, X, Users, UserMinus } from 'lucide-react'
 import { reminderSchema, type ReminderInput } from '@/lib/types/schemas'
-import type { Profile, Reminder } from '@/lib/types'
+import { MINUTE_RECURRENCES, type Profile, type Reminder, type RecurrenceType } from '@/lib/types'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Textarea } from '@/components/ui/textarea'
@@ -58,6 +58,7 @@ export default function ReminderForm({ users, reminder }: Props) {
   const startDate = useWatch({ control, name: 'reminder_date' })
   const endDate = useWatch({ control, name: 'end_date' })
   const isRecurring = recurrence !== 'none'
+  const isMinuteRecurrence = MINUTE_RECURRENCES.includes(recurrence as RecurrenceType)
 
   // Los campos del rango no están en el tipo estricto de errors de RHF
   const fieldError = (name: string) =>
@@ -175,6 +176,10 @@ export default function ReminderForm({ users, reminder }: Props) {
         <FormField label="Recurrence" error={errors.recurrence?.message}>
           <Select {...register('recurrence')}>
             <option value="none">No recurrence</option>
+            <option value="every_5_min">Every 5 minutes</option>
+            <option value="every_10_min">Every 10 minutes</option>
+            <option value="every_15_min">Every 15 minutes</option>
+            <option value="every_30_min">Every 30 minutes</option>
             <option value="hourly">Hourly (same day)</option>
             <option value="daily">Daily</option>
             <option value="weekly">Weekly</option>
@@ -189,7 +194,9 @@ export default function ReminderForm({ users, reminder }: Props) {
           label="End date"
           error={fieldError('end_date')}
           hint={
-            isRecurring
+            isMinuteRecurrence
+              ? 'Required — minute-based recurrences need an end date'
+              : isRecurring
               ? 'Optional — leave empty to repeat indefinitely'
               : 'Pick a recurrence above to schedule a date range'
           }

@@ -34,6 +34,18 @@ export function formatDateTime(dateStr: string, timeStr: string, timezone?: stri
   return `${formatDate(dateStr, timezone)} at ${formatTime(timeStr, timezone)}`
 }
 
+/** Timestamptz ISO ('2026-08-26T14:03:00Z') -> fecha y hora legibles. */
+export function formatTimestamp(isoStr: string): string {
+  return new Date(isoStr).toLocaleString('en-US', {
+    year: 'numeric',
+    month: 'short',
+    day: 'numeric',
+    hour: 'numeric',
+    minute: '2-digit',
+    hour12: true,
+  })
+}
+
 export function getStatusColor(status: string): string {
   switch (status) {
     case 'pending': return 'bg-yellow-100 text-yellow-800 border-yellow-200'
@@ -46,6 +58,10 @@ export function getStatusColor(status: string): string {
 export function getRecurrenceLabel(recurrence: string): string {
   switch (recurrence) {
     case 'none': return 'No recurrence'
+    case 'every_5_min': return 'Every 5 minutes'
+    case 'every_10_min': return 'Every 10 minutes'
+    case 'every_15_min': return 'Every 15 minutes'
+    case 'every_30_min': return 'Every 30 minutes'
     case 'hourly': return 'Hourly'
     case 'daily': return 'Daily'
     case 'weekly': return 'Weekly'
@@ -104,6 +120,18 @@ export function getNextOccurrence(
   const date = new Date(`${dateStr}T${h}:${m}:${sec.slice(0, 2)}Z`)
 
   switch (recurrence) {
+    case 'every_5_min':
+      date.setUTCMinutes(date.getUTCMinutes() + 5)
+      break
+    case 'every_10_min':
+      date.setUTCMinutes(date.getUTCMinutes() + 10)
+      break
+    case 'every_15_min':
+      date.setUTCMinutes(date.getUTCMinutes() + 15)
+      break
+    case 'every_30_min':
+      date.setUTCMinutes(date.getUTCMinutes() + 30)
+      break
     case 'hourly':
       date.setUTCHours(date.getUTCHours() + 1)
       break

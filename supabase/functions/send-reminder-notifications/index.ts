@@ -271,6 +271,18 @@ function getNextOccurrence(
   const date = new Date(`${dateStr}T${timeStr}Z`)
 
   switch (recurrence) {
+    case 'every_5_min':
+      date.setUTCMinutes(date.getUTCMinutes() + 5)
+      break
+    case 'every_10_min':
+      date.setUTCMinutes(date.getUTCMinutes() + 10)
+      break
+    case 'every_15_min':
+      date.setUTCMinutes(date.getUTCMinutes() + 15)
+      break
+    case 'every_30_min':
+      date.setUTCMinutes(date.getUTCMinutes() + 30)
+      break
     case 'hourly':
       date.setUTCHours(date.getUTCHours() + 1)
       break
